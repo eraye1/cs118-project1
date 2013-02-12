@@ -33,39 +33,45 @@ int HandleClient(int sock_d)
   
   fcntl(sock_d, F_SETFL, O_NONBLOCK);
   
+
   while(1)
-  { 
-    while(1)
+  {
+    time(&start);
+    time(&end);
+    while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
     {
-      time(&start);
-      time(&end);
-      while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) {
-        //cout << "Error: recv" << endl;
-        //return 1;
-        //cout << numbytes << endl;
-        if(difftime (end,start) > 10.0)
-        {
-          close(sock_d);
-          return 0;
-        }
-        time(&end);
-        continue;
-      }
-      totalbytes += numbytes;
-      if(numbytes == 0)
-      {
-        cout << "Connection: " << sock_d << " closed." << endl;
-        close(sock_d);
-        return 0;
-      }
-      if(numbytes == 2)
-      {
-        buf[totalbytes-2] = '\r';
-        buf[totalbytes-1] = '\n';
-        //if(newline)
-          break;
-        //newline = true;
-      }
+      //cout << "Error: recv" << endl;
+      //return 1;
+      //cout << numbytes << endl;
+      //if(difftime (end,start) > 10.0)
+      //{
+      //  close(sock_d);
+      //  return 0;
+      //}
+      //time(&end);
+      continue;
+    }
+    totalbytes += numbytes;
+    if(numbytes == 0)
+    {
+      cout << "Connection: " << sock_d << " closed." << endl;
+      close(sock_d);
+      return 0;
+    }
+    
+    if(totalbytes > 4 && buf[totalbytes-4] == '\r' && buf[totalbytes-3] == '\n' && buf[totalbytes-2] == '\r' && buf[totalbytes-1] == '\n')
+    {
+        break;
+    }
+    
+    if(numbytes == 2)
+    {
+      buf[totalbytes-2] = '\r';
+      buf[totalbytes-1] = '\n';
+      //if(newline)
+        break;
+      //newline = true;
+    }
       //else
       //{
         //newline = false;
@@ -114,9 +120,7 @@ int HandleClient(int sock_d)
       //return 1;
     //}
     
-    
-  }
-  
+    return 0;
 }
 
 
