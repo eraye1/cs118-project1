@@ -21,70 +21,130 @@ const size_t BUFSIZE = 1024;
 
 using namespace std;
 
-int HandleClient(int sock_d)
+int ReceiveHttpData(int sock_d, char* buf)
 {
-  //bool newline = false;
-  int numbytes;
-  int totalbytes = 0;
-  char buf[BUFSIZE];
-  stringstream ss,test;
-  size_t responseSize;
   time_t start, end;
+  int numbytes = 0;
+  int totalbytes = 0;
+  
   
   fcntl(sock_d, F_SETFL, O_NONBLOCK);
   
-
   while(1)
   {
+    //Will be used to track connection that has timed out
     time(&start);
     time(&end);
+    
+    //Polling read
     while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
     {
       //cout << "Error: recv" << endl;
       //return 1;
       //cout << numbytes << endl;
-      //if(difftime (end,start) > 10.0)
-      //{
-      //  close(sock_d);
-      //  return 0;
-      //}
-      //time(&end);
-      continue;
+      if(difftime (end,start) > 10.0)
+      {
+        cout << "Connection timed out" << endl;
+        cout << "Connection: " << sock_d << " closed." << endl << endl;
+        close(sock_d);
+        return -2;
+      }
+      time(&end);
     }
+    //Track total bytes read
     totalbytes += numbytes;
+    
+    //If 0 bytes are read the client has closed the connection
     if(numbytes == 0)
     {
-      cout << "Connection: " << sock_d << " closed." << endl;
+      cout << "Connection: " << sock_d << " closed." << endl << endl;
       close(sock_d);
       return 0;
     }
     
+    //If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
     if(totalbytes > 4 && buf[totalbytes-4] == '\r' && buf[totalbytes-3] == '\n' && buf[totalbytes-2] == '\r' && buf[totalbytes-1] == '\n')
     {
         break;
     }
-    
-    if(numbytes == 2)
-    {
-      buf[totalbytes-2] = '\r';
-      buf[totalbytes-1] = '\n';
-      //if(newline)
-        break;
-      //newline = true;
-    }
-      //else
+   
+  }
+  
+  return totalbytes;
+  
+}
+
+
+int HandleClient(int sock_client)
+{
+  //bool newline = false;
+  int sock_server;
+  int numbytes;
+  int totalbytes = 0;
+  char cbuf[BUFSIZE];
+  char sbuf[BUFSIZE];
+  stringstream ss,test;
+  size_t tempBufSize;
+  //time_t start, end;
+  char* tempBuf;
+  struct addrinfo hostai, *result;
+  
+  
+  while(1)
+  {
+    totalbytes = ReceiveHttpData(sock_client,cbuf);
+    cout << "Recieve status: " << totalbytes << endl;
+    if(totalbytes == 0)
+      return 0;
+  
+    //totalbytes = 0;
+    //numbytes = 0;
+    //while(1)
+    //{
+      ////Will be used to track connection that has timed out
+      //time(&start);
+      //time(&end);
+      
+      ////Polling read
+      //while((numbytes = recv(sock_client, buf+totalbytes, BUFSIZE, 0)) == -1) 
       //{
-        //newline = false;
+        ////cout << "Error: recv" << endl;
+        ////return 1;
+        ////cout << numbytes << endl;
+        //if(difftime (end,start) > 10.0)
+        //{
+          //cout << "Connection timed out" << endl;
+          //cout << "Connection: " << sock_client << " closed." << endl << endl;
+          //close(sock_client);
+          //return 0;
+        //}
+        //time(&end);
       //}
-    }
-    //buf[totalbytes] = '\0';
-    //cout << buf << endl;
+      ////Track total bytes read
+      //totalbytes += numbytes;
+      
+      ////If 0 bytes are read the client has closed the connection
+      //if(numbytes == 0)
+      //{
+        //cout << "Connection: " << sock_client << " closed." << endl << endl;
+        //close(sock_client);
+        //return 0;
+      //}
+      
+      ////If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
+      //if(totalbytes > 4 && buf[totalbytes-4] == '\r' && buf[totalbytes-3] == '\n' && buf[totalbytes-2] == '\r' && buf[totalbytes-1] == '\n')
+      //{
+          //break;
+      //}
+      
+     
+    //}
     HttpRequest req;
     HttpResponse rep;
     HttpHeaders head;
     
-    req.ParseRequest(buf,totalbytes);
-    //head.ParseHeaders(buf,totalbytes);
+    req.ParseRequest(cbuf,totalbytes);
+    head.ParseHeaders(cbuf,totalbytes);
     
     ss << "Method: " << req.GetMethod() << endl;
     ss << "Host: " << req.GetHost() << endl;
@@ -94,33 +154,75 @@ int HandleClient(int sock_d)
     
     cout << ss.str();
     
-    rep.SetVersion("1.1");
-    rep.SetStatusMsg("Bad Request");
-    rep.SetStatusCode("404");
+    //rep.SetVersion("1.1");
+    //rep.SetStatusMsg("Bad Request");
+    //rep.SetStatusCode("404");
     
-    responseSize = rep.GetTotalLength();
-    char* tempBuf = (char*)malloc(responseSize);
+    memset(&hostai,0,sizeof hostai);
+    hostai.ai_family = AF_INET;  //IPv4, but not sure if we need to do IPv6? No
+    hostai.ai_socktype = SOCK_STREAM;  //stream socket, uses TCP
+    hostai.ai_flags = AI_PASSIVE;  //fill in IP automatically, useful for binding
+    
+    ss.str("");
+    ss << req.GetPort();
+    
+    
+    getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
+    
+    sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
+    
+    connect(sock_server,result->ai_addr, result->ai_addrlen);
+    
+    tempBufSize = req.GetTotalLength();
+    tempBuf = (char*)malloc(tempBufSize);
+    
+    req.FormatRequest(tempBuf);    
+    
+    cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to sever" << endl;
+    
+    free(tempBuf);
+    //cout << "??" << endl;
+    numbytes = ReceiveHttpData(sock_server,sbuf);
+    cout << "Recv " << numbytes << " from server." << endl;
+    close(sock_server);
+    rep.ParseResponse(sbuf,numbytes);
+    
+    ss.str("");
+    
+    ss << "Version: " << rep.GetVersion() << endl;
+    ss << "Status Code: " << rep.GetStatusCode() << endl;
+    ss << "Status Message: " << rep.GetStatusMsg() << endl;
+    cout << ss.str();
+    
+    
+    tempBufSize = rep.GetTotalLength();
+    tempBuf = (char*)malloc(tempBufSize);
     
     rep.FormatResponse(tempBuf);
     
     
-    cout << "Sent " << send(sock_d, tempBuf, responseSize,0) << " bytes" << endl;
-    //if(head.FindHeader("") == "")
-    //{
-    //  close(sock_d);
-    // return 0;
-    //}
-    
-    //cout << "Sent " << send(sock_d, "\r\n", 2,0) << " bytes" << endl;
-    //buf[numbytes] = '\0';
-    //cout << buf ;
-    //if (send(sock_d,buf, numbytes, 0) == -1)
-    //{
-      //cout << "Error: send" << endl;
-      //return 1;
-    //}
-    
-    return 0;
+    cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
+    //cout << "Sent " << send(sock_client, "\r\n", 2,0) << " bytes" << endl;
+    free(tempBuf);
+    if(head.FindHeader("Connection") == "close")
+    {
+      cout << "HEADER Connection: close found" << endl;
+      cout << "Connection: " << sock_client << " closed." << endl << endl;
+      close(sock_server);
+      close(sock_client);
+      return 0;
+    }
+  }
+  //cout << "Sent " << send(sock_client, "\r\n", 2,0) << " bytes" << endl;
+  //buf[numbytes] = '\0';
+  //cout << buf ;
+  //if (send(sock_client,buf, numbytes, 0) == -1)
+  //{
+    //cout << "Error: send" << endl;
+    //return 1;
+  //}
+  
+  return 0;
 }
 
 
