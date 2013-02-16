@@ -100,8 +100,23 @@ int HandleClient(int sock_client)
     HttpHeaders head;
     
     req.ParseRequest(cbuf,totalbytes);
-    const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
-    head.ParseHeaders(endline+4,totalbytes-(cbuf-endline));
+    /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
+    
+    int iter = 0;
+    int totalheaderbytes = totalbytes-2;
+    while (*(cbuf+iter) != '\r' && *(cbuf+iter+1) != '\n')
+      {
+        iter++;
+        totalheaderbytes--;
+      }
+    
+    cout << *(endline) << endl;
+    cout << *(endline+1) << endl;
+    cout << *(endline+2) << endl;
+
+    head.ParseHeaders(endline+2,totalheaderbytes);
+    */
+    head.ParseHeaders(cbuf,totalbytes);
     //TODO
     //Need to check all the headers(expiration, etc) not just Connection: close
     //Same goes for information recieved from server further down.
