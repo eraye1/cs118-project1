@@ -77,7 +77,6 @@ int ReceiveHttpData(int sock_d, char* buf)
 
 int HandleClient(int sock_client)
 {
-  //bool newline = false;
   int sock_server;
   int numbytes;
   int totalbytes = 0;
@@ -85,7 +84,6 @@ int HandleClient(int sock_client)
   char sbuf[BUFSIZE];
   stringstream ss,test;
   size_t tempBufSize;
-  //time_t start, end;
   char* tempBuf;
   struct addrinfo hostai, *result;
   
@@ -97,54 +95,15 @@ int HandleClient(int sock_client)
     if(totalbytes == 0)
       return 0;
   
-    //totalbytes = 0;
-    //numbytes = 0;
-    //while(1)
-    //{
-      ////Will be used to track connection that has timed out
-      //time(&start);
-      //time(&end);
-      
-      ////Polling read
-      //while((numbytes = recv(sock_client, buf+totalbytes, BUFSIZE, 0)) == -1) 
-      //{
-        ////cout << "Error: recv" << endl;
-        ////return 1;
-        ////cout << numbytes << endl;
-        //if(difftime (end,start) > 10.0)
-        //{
-          //cout << "Connection timed out" << endl;
-          //cout << "Connection: " << sock_client << " closed." << endl << endl;
-          //close(sock_client);
-          //return 0;
-        //}
-        //time(&end);
-      //}
-      ////Track total bytes read
-      //totalbytes += numbytes;
-      
-      ////If 0 bytes are read the client has closed the connection
-      //if(numbytes == 0)
-      //{
-        //cout << "Connection: " << sock_client << " closed." << endl << endl;
-        //close(sock_client);
-        //return 0;
-      //}
-      
-      ////If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
-      //if(totalbytes > 4 && buf[totalbytes-4] == '\r' && buf[totalbytes-3] == '\n' && buf[totalbytes-2] == '\r' && buf[totalbytes-1] == '\n')
-      //{
-          //break;
-      //}
-      
-     
-    //}
     HttpRequest req;
     HttpResponse rep;
     HttpHeaders head;
     
     req.ParseRequest(cbuf,totalbytes);
     head.ParseHeaders(cbuf,totalbytes);
+    //TODO
+    //Need to check all the headers(expiration, etc) not just Connection: close
+    //Same goes for information recieved from server further down.
     
     ss << "Method: " << req.GetMethod() << endl;
     ss << "Host: " << req.GetHost() << endl;
@@ -154,10 +113,6 @@ int HandleClient(int sock_client)
     
     cout << ss.str();
     
-    //rep.SetVersion("1.1");
-    //rep.SetStatusMsg("Bad Request");
-    //rep.SetStatusCode("404");
-    
     memset(&hostai,0,sizeof hostai);
     hostai.ai_family = AF_INET;  //IPv4, but not sure if we need to do IPv6? No
     hostai.ai_socktype = SOCK_STREAM;  //stream socket, uses TCP
@@ -166,13 +121,13 @@ int HandleClient(int sock_client)
     ss.str("");
     ss << req.GetPort();
     
-    
+    //Connect to requested Server
     getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
-    
+    //TODO Implement caching hereish?  This is where we can map ip and path to data.
     sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
-    
     connect(sock_server,result->ai_addr, result->ai_addrlen);
     
+    //Allocate space to build the HTTP request
     tempBufSize = req.GetTotalLength();
     tempBuf = (char*)malloc(tempBufSize);
     
@@ -184,6 +139,10 @@ int HandleClient(int sock_client)
     //cout << "??" << endl;
     numbytes = ReceiveHttpData(sock_server,sbuf);
     cout << "Recv " << numbytes << " from server." << endl;
+    //TODO
+    //Currently we only get the header from the server.
+    //Need to call ReceiveHttpData() again with a new buffer to get page data
+
     close(sock_server);
     rep.ParseResponse(sbuf,numbytes);
     
@@ -202,7 +161,6 @@ int HandleClient(int sock_client)
     
     
     cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
-    //cout << "Sent " << send(sock_client, "\r\n", 2,0) << " bytes" << endl;
     free(tempBuf);
     if(head.FindHeader("Connection") == "close")
     {
@@ -213,14 +171,6 @@ int HandleClient(int sock_client)
       return 0;
     }
   }
-  //cout << "Sent " << send(sock_client, "\r\n", 2,0) << " bytes" << endl;
-  //buf[numbytes] = '\0';
-  //cout << buf ;
-  //if (send(sock_client,buf, numbytes, 0) == -1)
-  //{
-    //cout << "Error: send" << endl;
-    //return 1;
-  //}
   
   return 0;
 }
