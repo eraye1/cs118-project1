@@ -100,7 +100,8 @@ int HandleClient(int sock_client)
     HttpHeaders head;
     
     req.ParseRequest(cbuf,totalbytes);
-    head.ParseHeaders(cbuf,totalbytes);
+    const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
+    head.ParseHeaders(endline+4,totalbytes-(cbuf-endline));
     //TODO
     //Need to check all the headers(expiration, etc) not just Connection: close
     //Same goes for information recieved from server further down.
