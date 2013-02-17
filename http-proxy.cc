@@ -56,6 +56,7 @@ int ReceiveHttpHeader(int sock_d, char* buf, bool isresponse)
     while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
     {
       //cout << "Error: recv" << endl;
+      //return -2;
       //return 1;
       //cout << numbytes << endl;
       if(difftime (end,start) > 15.0)
@@ -66,6 +67,7 @@ int ReceiveHttpHeader(int sock_d, char* buf, bool isresponse)
         return -2;
       }
       time(&end);
+      
     }
     //Track total bytes read
     totalbytes += numbytes;
@@ -135,60 +137,6 @@ int ReceiveHttpHeader(int sock_d, char* buf, bool isresponse)
   
 }
 
-int ReceiveHttpData(int sock_d, char* buf, int bytestoread)
-{
-  time_t start, end;
-  int numbytes = 0;
-  int totalbytes = 0;
-  
-  
-  fcntl(sock_d, F_SETFL, O_NONBLOCK);
-  
-  while(1)
-  {
-    //Will be used to track connection that has timed out
-    time(&start);
-    time(&end);
-    
-    //Polling read
-    while((numbytes = recv(sock_d, buf+totalbytes, bytestoread, 0)) == -1) 
-    {
-      //cout << "Error: recv" << endl;
-      //return 1;
-      //cout << numbytes << endl;
-      if(difftime (end,start) > 15.0)
-      {
-        cout << "Connection timed out" << endl;
-        cout << "Connection: " << sock_d << " closed." << endl << endl;
-        cout << "Totalbytes: " << totalbytes << endl;
-        close(sock_d);
-        return -2;
-      }
-      time(&end);
-    }
-    //Track total bytes read
-    totalbytes += numbytes;
-    
-    //If 0 bytes are read the client has closed the connection
-    if(numbytes == 0)
-    {
-      cout << "Connection: " << sock_d << " closed." << endl << endl;
-      close(sock_d);
-      return 0;
-    }
-    
-    //If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
-    if(totalbytes == bytestoread)
-    {
-        break;
-    }
-   
-  }
-  
-  return totalbytes;
-  
-}
-
 
 int HandleClient(int sock_client)
 {
@@ -222,11 +170,20 @@ int HandleClient(int sock_client)
     {
       req.ParseRequest(cbuf,totalbytes);
     }
-    catch (ParseException)
+    catch (ParseException ex)
     {
+      string cmp = "Request is not GET";
+      if (strcmp(ex.what(), cmp.c_str())){
       rep.SetStatusCode("501");
       rep.SetStatusMsg("Not Implemented");
-      rep.SetVersion("1.1");
+      rep.SetVersion(req.GetVersion());      	
+      }
+      else {
+      rep.SetStatusCode("400");
+      rep.SetStatusMsg("Bad Request");
+      rep.SetVersion(req.GetVersion());
+      }
+      
       tempBufSize = rep.GetTotalLength();
       tempBuf = (char*)malloc(tempBufSize);
       rep.FormatResponse(tempBuf);
@@ -234,6 +191,10 @@ int HandleClient(int sock_client)
       free(tempBuf);
       return 0;
     } 
+    
+    string version = req.GetVersion();
+    if( version == "1.0")
+    req.ModifyHeader("Connection", "close");
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
@@ -274,61 +235,69 @@ int HandleClient(int sock_client)
     //Connect to requested Server
     getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
-    sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
-    connect(sock_server,result->ai_addr, result->ai_addrlen);
+    //Check to see if it's in there and ...
+    bool cached = false;
+    if (!cached) {
+    	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
+    	connect(sock_server,result->ai_addr, result->ai_addrlen);
     
-    //Allocate space to build the HTTP request
-    tempBufSize = req.GetTotalLength();
-    tempBuf = (char*)malloc(tempBufSize);
+    	//Allocate space to build the HTTP request
+    	tempBufSize = req.GetTotalLength();
+        tempBuf = (char*)malloc(tempBufSize);
     
-    req.FormatRequest(tempBuf);    
+    	req.FormatRequest(tempBuf);    
     
-    cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to sever" << endl;
+        cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to server" << endl;
     
-    free(tempBuf);
-    //cout << "??" << endl;
-    numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
-    cout << "Recv " << numbytes << " from server for header." << endl;
-    
-    ss.str("");
-    ss << sbuf << endl;
-    cout << ss.str();
-    //TODO
-    //Currently we only get the header from the server.
-    //Need to call ReceiveHttpData() with a new buffer to get page data
-    headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
-    head.ParseHeaders(hbuf,headersize);
-    datasize = atoi(head.FindHeader("Content-Length").c_str());
+        free(tempBuf);
+        //cout << "??" << endl;
+        numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
+        cout << "Recv " << numbytes << " from server." << endl;
+        //TODO
+        //Currently we only get the header from the server.
+        //Need to call ReceiveHttpData() again with a new buffer to get page data
+        headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
+        head.ParseHeaders(hbuf,headersize);
+        datasize = atoi(head.FindHeader("Content-Length").c_str());
 
+        close(sock_server);
+        rep.ParseResponse(sbuf,numbytes);
+	
+	//TODO, need to cache the response here, can use a map with a lookup key and a buffer.
+        ss.str("");
     
-    close(sock_server);
-    rep.ParseResponse(sbuf,numbytes);
-    
-    ss.str("");
-    
-    ss << "Version: " << rep.GetVersion() << endl;
-    ss << "Status Code: " << rep.GetStatusCode() << endl;
-    ss << "Status Message: " << rep.GetStatusMsg() << endl;
-    cout << ss.str();
-    
-    
-    tempBufSize = rep.GetTotalLength();
-    tempBuf = (char*)malloc(tempBufSize);
-    
-    rep.FormatResponse(tempBuf);
+        ss << "Version: " << rep.GetVersion() << endl;
+        ss << "Status Code: " << rep.GetStatusCode() << endl;
+        ss << "Status Message: " << rep.GetStatusMsg() << endl;
+        cout << ss.str();
     
     
-    cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
-    cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes" << endl;
-    free(tempBuf);
-    if(head.FindHeader("Connection") == "close")
-    {
-      cout << "HEADER Connection: close found" << endl;
-      cout << "Connection: " << sock_client << " closed." << endl << endl;
-      close(sock_server);
-      close(sock_client);
-      return 0;
-    }
+        tempBufSize = rep.GetTotalLength();
+        tempBuf = (char*)malloc(tempBufSize);
+    
+        rep.FormatResponse(tempBuf);
+    
+    
+        cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
+        cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
+        free(tempBuf);
+    
+
+        if(head.FindHeader("Connection") == "close")
+        {
+          cout << "HEADER Connection: close found" << endl;
+          cout << "Connection: " << sock_client << " closed." << endl << endl;
+      	  close(sock_server);
+          close(sock_client);
+          return 0;
+         }
+        }
+        else {  //Cached, get it from internal memory and send it.
+        	
+        	
+        	
+        	
+        }
   }
   
   return 0;
