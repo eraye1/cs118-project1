@@ -155,52 +155,66 @@ int HandleClient(int sock_client)
     //Connect to requested Server
     getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
-    sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
-    connect(sock_server,result->ai_addr, result->ai_addrlen);
+    //Check to see if it's in there and ...
+    bool cached = false;
+    if (cached) {
+    	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
+    	connect(sock_server,result->ai_addr, result->ai_addrlen);
     
-    //Allocate space to build the HTTP request
-    tempBufSize = req.GetTotalLength();
-    tempBuf = (char*)malloc(tempBufSize);
+    	//Allocate space to build the HTTP request
+    	tempBufSize = req.GetTotalLength();
+        tempBuf = (char*)malloc(tempBufSize);
     
-    req.FormatRequest(tempBuf);    
+    	req.FormatRequest(tempBuf);    
     
-    cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to sever" << endl;
+        cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to server" << endl;
     
-    free(tempBuf);
-    //cout << "??" << endl;
-    numbytes = ReceiveHttpData(sock_server,sbuf);
-    cout << "Recv " << numbytes << " from server." << endl;
-    //TODO
-    //Currently we only get the header from the server.
-    //Need to call ReceiveHttpData() again with a new buffer to get page data
-
-    close(sock_server);
-    rep.ParseResponse(sbuf,numbytes);
+        free(tempBuf);
+        //cout << "??" << endl;
+        numbytes = ReceiveHttpData(sock_server,sbuf);
+        cout << "Recv " << numbytes << " from server." << endl;
+        //TODO
+        //Currently we only get the header from the server.
+        //Need to call ReceiveHttpData() again with a new buffer to get page data
+        numbytes += ReceiveHttpData(sock_server,sbuf);
+        cout << "Recv " << numbytes << "entity body bytes from server." << endl;
     
-    ss.str("");
+        close(sock_server);
+        rep.ParseResponse(sbuf,numbytes);
+	
+	//TODO, need to cache the response here, can use a map with a lookup key and a buffer.
+        ss.str("");
     
-    ss << "Version: " << rep.GetVersion() << endl;
-    ss << "Status Code: " << rep.GetStatusCode() << endl;
-    ss << "Status Message: " << rep.GetStatusMsg() << endl;
-    cout << ss.str();
-    
-    
-    tempBufSize = rep.GetTotalLength();
-    tempBuf = (char*)malloc(tempBufSize);
-    
-    rep.FormatResponse(tempBuf);
+        ss << "Version: " << rep.GetVersion() << endl;
+        ss << "Status Code: " << rep.GetStatusCode() << endl;
+        ss << "Status Message: " << rep.GetStatusMsg() << endl;
+        cout << ss.str();
     
     
-    cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
-    free(tempBuf);
-    if(head.FindHeader("Connection") == "close")
-    {
-      cout << "HEADER Connection: close found" << endl;
-      cout << "Connection: " << sock_client << " closed." << endl << endl;
-      close(sock_server);
-      close(sock_client);
-      return 0;
-    }
+        tempBufSize = rep.GetTotalLength();
+        tempBuf = (char*)malloc(tempBufSize);
+    
+        rep.FormatResponse(tempBuf);
+    
+    
+        cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
+        free(tempBuf);
+    
+        if(head.FindHeader("Connection") == "close")
+        {
+          cout << "HEADER Connection: close found" << endl;
+          cout << "Connection: " << sock_client << " closed." << endl << endl;
+      	  close(sock_server);
+          close(sock_client);
+          return 0;
+         }
+        }
+        else {  //Cached, get it from internal memory and send it.
+        	
+        	
+        	
+        	
+        }
   }
   
   return 0;
