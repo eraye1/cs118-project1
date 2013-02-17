@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netdb.h>
 #include <string.h>
 #include <errno.h>
@@ -20,7 +21,7 @@ using namespace std;
 
 const string SERVER_PORT = "14890";
 const size_t BUFSIZE = 1024;
-const int NUMTHREAD = 10;
+const int MAXNUMTHREAD = 1;
 
 int GetHeaderStats(char* buf,int size, char** headerStart)
 {
@@ -194,7 +195,7 @@ int HandleClient(int sock_client)
     
     string version = req.GetVersion();
     if( version == "1.0")
-    req.ModifyHeader("Connection", "close");
+      req.ModifyHeader("Connection", "close");
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
@@ -237,67 +238,68 @@ int HandleClient(int sock_client)
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
     //Check to see if it's in there and ...
     bool cached = false;
-    if (!cached) {
+    if (!cached) 
+    {
     	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
     	connect(sock_server,result->ai_addr, result->ai_addrlen);
     
     	//Allocate space to build the HTTP request
     	tempBufSize = req.GetTotalLength();
-        tempBuf = (char*)malloc(tempBufSize);
+      tempBuf = (char*)malloc(tempBufSize);
     
     	req.FormatRequest(tempBuf);    
-    
-        cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to server" << endl;
-    
-        free(tempBuf);
-        //cout << "??" << endl;
-        numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
-        cout << "Recv " << numbytes << " from server." << endl;
-        //TODO
-        //Currently we only get the header from the server.
-        //Need to call ReceiveHttpData() again with a new buffer to get page data
-        headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
-        head.ParseHeaders(hbuf,headersize);
-        datasize = atoi(head.FindHeader("Content-Length").c_str());
+  
+      cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to server" << endl;
+  
+      free(tempBuf);
+      //cout << "??" << endl;
+      numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
+      cout << "Recv " << numbytes << " from server." << endl;
+      //TODO
+      //Currently we only get the header from the server.
+      //Need to call ReceiveHttpData() again with a new buffer to get page data
+      headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
+      head.ParseHeaders(hbuf,headersize);
+      datasize = atoi(head.FindHeader("Content-Length").c_str());
 
+      close(sock_server);
+      rep.ParseResponse(sbuf,numbytes);
+
+      //TODO, need to cache the response here, can use a map with a lookup key and a buffer.
+      ss.str("");
+  
+      ss << "Version: " << rep.GetVersion() << endl;
+      ss << "Status Code: " << rep.GetStatusCode() << endl;
+      ss << "Status Message: " << rep.GetStatusMsg() << endl;
+      cout << ss.str();
+  
+  
+      tempBufSize = rep.GetTotalLength();
+      tempBuf = (char*)malloc(tempBufSize);
+  
+      rep.FormatResponse(tempBuf);
+  
+  
+      cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
+      cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
+      free(tempBuf);
+  
+
+      if(head.FindHeader("Connection") == "close")
+      {
+        cout << "HEADER Connection: close found" << endl;
+        cout << "Connection: " << sock_client << " closed." << endl << endl;
         close(sock_server);
-        rep.ParseResponse(sbuf,numbytes);
-	
-	//TODO, need to cache the response here, can use a map with a lookup key and a buffer.
-        ss.str("");
-    
-        ss << "Version: " << rep.GetVersion() << endl;
-        ss << "Status Code: " << rep.GetStatusCode() << endl;
-        ss << "Status Message: " << rep.GetStatusMsg() << endl;
-        cout << ss.str();
-    
-    
-        tempBufSize = rep.GetTotalLength();
-        tempBuf = (char*)malloc(tempBufSize);
-    
-        rep.FormatResponse(tempBuf);
-    
-    
-        cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
-        cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
-        free(tempBuf);
-    
-
-        if(head.FindHeader("Connection") == "close")
-        {
-          cout << "HEADER Connection: close found" << endl;
-          cout << "Connection: " << sock_client << " closed." << endl << endl;
-      	  close(sock_server);
-          close(sock_client);
-          return 0;
-         }
-        }
-        else {  //Cached, get it from internal memory and send it.
-        	
-        	
-        	
-        	
-        }
+        close(sock_client);
+        return 0;
+      }
+    }
+    else {  //Cached, get it from internal memory and send it.
+      
+      
+      
+      
+    }
   }
   
   return 0;
@@ -356,27 +358,53 @@ int main (int argc, char *argv[])
   cout << "listenresult: " << listenresult << endl;
   //Broke these lines up and replaced '\n' with endl and it stopped 
   //getting stuck and accepted my telnet requests.
-  int threadc = 0;
+  int procCount = 0;
   while(1)
   {
     addr_size = sizeof their_addr;
-    if (threadc != 10 || (waitpid(-1,NULL,NULL) != 0))
-{
+
     sock_new = accept(sock_d, (struct sockaddr *)&their_addr, &addr_size);  //accept the connection
-    if(sock_new)
+    int wpstat = waitpid(-1,NULL,WNOHANG);
+    if(procCount > 0 && wpstat > 0)
+    {
+      cout << "WP Stat " << wpstat << endl;
+      procCount--;
+    }
+    procCount++;
+    cout << "Number of procs " << procCount << endl;
+    if (procCount > MAXNUMTHREAD)
+    {
+      int tempBufSize;
+      char* tempBuf;
+      //Error Server busy/full
+      cout << "==========================" << endl;
+      cout << "Server Full" << endl;
+      cout << "==========================" << endl;
+      HttpResponse rep;
+      HttpHeaders head;
+      rep.SetStatusCode("503");
+      rep.SetStatusMsg("Service Unavailable");
+      rep.SetVersion("1.1");
+      head.AddHeader("Connection","close");
+      tempBufSize = rep.GetTotalLength();
+      tempBuf = (char*)malloc(tempBufSize);
+      rep.FormatResponse(tempBuf);
+      cout << "Sent " << send(sock_new, tempBuf, tempBufSize,0) << " bytes" << endl;
+      close(sock_new);
+      free(tempBuf);
+      procCount--;
+    }
+    else if(sock_new)
     {
       if (!fork()) // this is the child process 
       {
         close(sock_d);  // child doesn't need the listener
         HandleClient(sock_new);
-        threadc--;
         return 0;
       }
       cout << "Connection: " << sock_new << " opened." << endl;
-      threadc++;
       close(sock_new); //Getting "Address alread in use" error immediatly after a run... thought this would release the socket and fix it.
-    }
-}   
+    }  
   }
   
   
