@@ -39,10 +39,11 @@ int ReceiveHttpData(int sock_d, char* buf)
     //Polling read
     while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
     {
-      //cout << "Error: recv" << endl;
+      cout << "Error: recv" << endl;
+      return -2;
       //return 1;
       //cout << numbytes << endl;
-      if(difftime (end,start) > 15.0)
+      /*if(difftime (end,start) > 15.0)
       {
         cout << "Connection timed out" << endl;
         cout << "Connection: " << sock_d << " closed." << endl << endl;
@@ -50,6 +51,7 @@ int ReceiveHttpData(int sock_d, char* buf)
         return -2;
       }
       time(&end);
+      */
     }
     //Track total bytes read
     totalbytes += numbytes;
@@ -105,9 +107,18 @@ int HandleClient(int sock_client)
     }
     catch (ParseException)
     {
+      string cmp = "Request is not GET";
+      if (strcmp(ex.what(), cmp.c_str())){
       rep.SetStatusCode("501");
       rep.SetStatusMsg("Not Implemented");
-      rep.SetVersion("1.1");
+      rep.SetVersion(req.GetVersion());      	
+      }
+      else {
+      rep.SetStatusCode("400");
+      rep.SetStatusMsg("Bad Request");
+      rep.SetVersion(req.GetVersion());
+      }
+      
       tempBufSize = rep.GetTotalLength();
       tempBuf = (char*)malloc(tempBufSize);
       rep.FormatResponse(tempBuf);
@@ -115,6 +126,10 @@ int HandleClient(int sock_client)
       free(tempBuf);
       return 0;
     } 
+    
+    string version = clientReq.GetVersion();
+    if( version == "1.0")
+    clientReq.ModifyHeader("Connection", "close");
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
@@ -176,8 +191,9 @@ int HandleClient(int sock_client)
         //TODO
         //Currently we only get the header from the server.
         //Need to call ReceiveHttpData() again with a new buffer to get page data
-        numbytes += ReceiveHttpData(sock_server,sbuf);
-        cout << "Recv " << numbytes << "entity body bytes from server." << endl;
+
+	//        numbytes += ReceiveHttpData(sock_server,sbuf);
+        //cout << "Recv " << numbytes << "total bytes from server." << endl;
     
         close(sock_server);
         rep.ParseResponse(sbuf,numbytes);
