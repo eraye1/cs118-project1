@@ -39,11 +39,11 @@ int ReceiveHttpData(int sock_d, char* buf)
     //Polling read
     while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
     {
-      cout << "Error: recv" << endl;
-      return -2;
+      //cout << "Error: recv" << endl;
+      //return -2;
       //return 1;
       //cout << numbytes << endl;
-      /*if(difftime (end,start) > 15.0)
+      if(difftime (end,start) > 15.0)
       {
         cout << "Connection timed out" << endl;
         cout << "Connection: " << sock_d << " closed." << endl << endl;
@@ -51,7 +51,7 @@ int ReceiveHttpData(int sock_d, char* buf)
         return -2;
       }
       time(&end);
-      */
+      
     }
     //Track total bytes read
     totalbytes += numbytes;
@@ -172,7 +172,7 @@ int HandleClient(int sock_client)
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
     //Check to see if it's in there and ...
     bool cached = false;
-    if (cached) {
+    if (!cached) {
     	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
     	connect(sock_server,result->ai_addr, result->ai_addrlen);
     
@@ -192,9 +192,7 @@ int HandleClient(int sock_client)
         //Currently we only get the header from the server.
         //Need to call ReceiveHttpData() again with a new buffer to get page data
 
-	//        numbytes += ReceiveHttpData(sock_server,sbuf);
-        //cout << "Recv " << numbytes << "total bytes from server." << endl;
-    
+
         close(sock_server);
         rep.ParseResponse(sbuf,numbytes);
 	
