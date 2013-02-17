@@ -42,7 +42,7 @@ int ReceiveHttpData(int sock_d, char* buf)
       //cout << "Error: recv" << endl;
       //return 1;
       //cout << numbytes << endl;
-      if(difftime (end,start) > 10.0)
+      if(difftime (end,start) > 15.0)
       {
         cout << "Connection timed out" << endl;
         cout << "Connection: " << sock_d << " closed." << endl << endl;
