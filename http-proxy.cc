@@ -105,7 +105,7 @@ int HandleClient(int sock_client)
     {
       req.ParseRequest(cbuf,totalbytes);
     }
-    catch (ParseException)
+    catch (ParseException ex)
     {
       string cmp = "Request is not GET";
       if (strcmp(ex.what(), cmp.c_str())){
@@ -127,7 +127,7 @@ int HandleClient(int sock_client)
       return 0;
     } 
     
-    string version = clientReq.GetVersion();
+    string version = req.GetVersion();
     if( version == "1.0")
     clientReq.ModifyHeader("Connection", "close");
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
