@@ -20,7 +20,7 @@ using namespace std;
 
 const string SERVER_PORT = "14890";
 const size_t BUFSIZE = 1024;
-
+const int NUMTHREAD = 10;
 
 int GetHeaderStats(char* buf,int size, char** headerStart)
 {
@@ -356,10 +356,12 @@ int main (int argc, char *argv[])
   cout << "listenresult: " << listenresult << endl;
   //Broke these lines up and replaced '\n' with endl and it stopped 
   //getting stuck and accepted my telnet requests.
-  
+  int threadc = 0;
   while(1)
   {
     addr_size = sizeof their_addr;
+    if (threadc == 10)
+         waitpid(-1,NULL,NULL);
     sock_new = accept(sock_d, (struct sockaddr *)&their_addr, &addr_size);  //accept the connection
     if(sock_new)
     {
@@ -367,11 +369,14 @@ int main (int argc, char *argv[])
       {
         close(sock_d);  // child doesn't need the listener
         HandleClient(sock_new);
+        threadc--;
         return 0;
       }
       cout << "Connection: " << sock_new << " opened." << endl;
+      threadc++;
       close(sock_new); //Getting "Address alread in use" error immediatly after a run... thought this would release the socket and fix it.
     }
+    
   }
   
   
