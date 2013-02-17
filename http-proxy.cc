@@ -101,7 +101,7 @@ int HandleClient(int sock_client)
     
     try
     {
-      req.ParseRequest(cbuf,totalBytes);
+      req.ParseRequest(cbuf,totalbytes);
     }
     catch (ParseException)
     {
@@ -113,7 +113,8 @@ int HandleClient(int sock_client)
       rep.FormatResponse(tempBuf);
       cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
       free(tempBuf);
-      r
+      return 0;
+    } 
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
