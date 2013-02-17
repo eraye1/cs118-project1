@@ -99,7 +99,21 @@ int HandleClient(int sock_client)
     HttpResponse rep;
     HttpHeaders head;
     
-    req.ParseRequest(cbuf,totalbytes);
+    try
+    {
+      req.ParseRequest(cbuf,totalBytes);
+    }
+    catch (ParseException)
+    {
+      rep.SetStatusCode("501");
+      rep.SetStatusMsg("Not Implemented");
+      rep.SetVersion("1.1");
+      tempBufSize = rep.GetTotalLength();
+      tempBuf = (char*)malloc(tempBufSize);
+      rep.FormatResponse(tempBuf);
+      cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
+      free(tempBuf);
+      r
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
