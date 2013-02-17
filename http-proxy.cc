@@ -16,17 +16,33 @@
 #include <fcntl.h>
 #include <time.h>
 
-
-const size_t BUFSIZE = 1024;
-
 using namespace std;
 
-int ReceiveHttpData(int sock_d, char* buf)
+const string SERVER_PORT = "14890";
+const size_t BUFSIZE = 1024;
+
+
+int GetHeaderStats(char* buf,int size, char** headerStart)
+{
+  *headerStart = ((char *)memmem (buf, size, "\r\n", 2))+2;
+  
+  for(int i = 0; *(buf+i) != '\r' && *(buf+i+1) != '\n'; i++)
+    {
+      size--;
+    }
+  return size - 2;
+} 
+
+int ReceiveHttpHeader(int sock_d, char* buf, bool isresponse)
 {
   time_t start, end;
   int numbytes = 0;
   int totalbytes = 0;
-  
+  char* hbuf = NULL;
+  int headersize = 0;
+  int datasize = 0;
+  int dataread = 0;
+  HttpHeaders head;
   
   fcntl(sock_d, F_SETFL, O_NONBLOCK);
   
@@ -69,6 +85,105 @@ int ReceiveHttpData(int sock_d, char* buf)
     }
    
   }
+  if(isresponse)
+  {
+    headersize = GetHeaderStats(buf,totalbytes,&hbuf);
+    head.ParseHeaders(hbuf,headersize);
+    datasize = atoi(head.FindHeader("Content-Length").c_str());
+    while(1)
+    {
+      //Will be used to track connection that has timed out
+      time(&start);
+      time(&end);
+      
+      //Polling read
+      while((numbytes = recv(sock_d, buf+totalbytes, BUFSIZE, 0)) == -1) 
+      {
+        //cout << "Error: recv" << endl;
+        //return 1;
+        //cout << numbytes << endl;
+        if(difftime (end,start) > 15.0)
+        {
+          cout << "Connection timed out" << endl;
+          cout << "Connection: " << sock_d << " closed." << endl << endl;
+          close(sock_d);
+          return -2;
+        }
+        time(&end);
+      }
+      //Track total bytes read
+      dataread += numbytes;
+      totalbytes += numbytes;
+      
+      //If 0 bytes are read the client has closed the connection
+      if(numbytes == 0)
+      {
+        cout << "Connection: " << sock_d << " closed." << endl << endl;
+        close(sock_d);
+        return totalbytes;
+      }
+      
+      //If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
+      if(dataread == datasize)
+      {
+          break;
+      }
+     
+    }
+  }
+  return totalbytes;
+  
+}
+
+int ReceiveHttpData(int sock_d, char* buf, int bytestoread)
+{
+  time_t start, end;
+  int numbytes = 0;
+  int totalbytes = 0;
+  
+  
+  fcntl(sock_d, F_SETFL, O_NONBLOCK);
+  
+  while(1)
+  {
+    //Will be used to track connection that has timed out
+    time(&start);
+    time(&end);
+    
+    //Polling read
+    while((numbytes = recv(sock_d, buf+totalbytes, bytestoread, 0)) == -1) 
+    {
+      //cout << "Error: recv" << endl;
+      //return 1;
+      //cout << numbytes << endl;
+      if(difftime (end,start) > 15.0)
+      {
+        cout << "Connection timed out" << endl;
+        cout << "Connection: " << sock_d << " closed." << endl << endl;
+        cout << "Totalbytes: " << totalbytes << endl;
+        close(sock_d);
+        return -2;
+      }
+      time(&end);
+    }
+    //Track total bytes read
+    totalbytes += numbytes;
+    
+    //If 0 bytes are read the client has closed the connection
+    if(numbytes == 0)
+    {
+      cout << "Connection: " << sock_d << " closed." << endl << endl;
+      close(sock_d);
+      return 0;
+    }
+    
+    //If the last 4 bytes match the pattern '\r\n\r\n' then we have a complete request
+    if(totalbytes == bytestoread)
+    {
+        break;
+    }
+   
+  }
   
   return totalbytes;
   
@@ -79,9 +194,13 @@ int HandleClient(int sock_client)
 {
   int sock_server;
   int numbytes;
+  int datasize;
+  int headersize;
   int totalbytes = 0;
   char cbuf[BUFSIZE];
   char sbuf[BUFSIZE];
+  //char* dbuf = NULL; 
+  char* hbuf = NULL;
   stringstream ss,test;
   size_t tempBufSize;
   char* tempBuf;
@@ -90,7 +209,7 @@ int HandleClient(int sock_client)
   
   while(1)
   {
-    totalbytes = ReceiveHttpData(sock_client,cbuf);
+    totalbytes = ReceiveHttpHeader(sock_client,cbuf,false);
     cout << "Recieve status: " << totalbytes << endl;
     if(totalbytes == 0)
       return 0;
@@ -168,12 +287,20 @@ int HandleClient(int sock_client)
     
     free(tempBuf);
     //cout << "??" << endl;
-    numbytes = ReceiveHttpData(sock_server,sbuf);
-    cout << "Recv " << numbytes << " from server." << endl;
+    numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
+    cout << "Recv " << numbytes << " from server for header." << endl;
+    
+    ss.str("");
+    ss << sbuf << endl;
+    cout << ss.str();
     //TODO
     //Currently we only get the header from the server.
-    //Need to call ReceiveHttpData() again with a new buffer to get page data
+    //Need to call ReceiveHttpData() with a new buffer to get page data
+    headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
+    head.ParseHeaders(hbuf,headersize);
+    datasize = atoi(head.FindHeader("Content-Length").c_str());
 
+    
     close(sock_server);
     rep.ParseResponse(sbuf,numbytes);
     
@@ -192,6 +319,7 @@ int HandleClient(int sock_client)
     
     
     cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
+    cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes" << endl;
     free(tempBuf);
     if(head.FindHeader("Connection") == "close")
     {
@@ -230,7 +358,7 @@ int main (int argc, char *argv[])
   hostai.ai_socktype = SOCK_STREAM;  //stream socket, uses TCP
   hostai.ai_flags = AI_PASSIVE;  //fill in IP automatically, useful for binding
 
-	status = getaddrinfo(NULL, "14891", &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
+	status = getaddrinfo(NULL, SERVER_PORT.c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
   if(status) 
 	{
 		cout << "Error: getaddrinfo() returned " << status << endl;
