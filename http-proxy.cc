@@ -360,8 +360,8 @@ int main (int argc, char *argv[])
   while(1)
   {
     addr_size = sizeof their_addr;
-    if (threadc == 10)
-         waitpid(-1,NULL,NULL);
+    if (threadc != 10 || (waitpid(-1,NULL,NULL) != 0))
+{
     sock_new = accept(sock_d, (struct sockaddr *)&their_addr, &addr_size);  //accept the connection
     if(sock_new)
     {
@@ -376,7 +376,7 @@ int main (int argc, char *argv[])
       threadc++;
       close(sock_new); //Getting "Address alread in use" error immediatly after a run... thought this would release the socket and fix it.
     }
-    
+}   
   }
   
   
