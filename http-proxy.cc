@@ -21,7 +21,7 @@ using namespace std;
 
 const string SERVER_PORT = "14890";
 const size_t BUFSIZE = 1024;
-const int MAXNUMTHREAD = 1;
+const int MAXNUMPROC = 10;
 
 int GetHeaderStats(char* buf,int size, char** headerStart)
 {
@@ -372,7 +372,7 @@ int main (int argc, char *argv[])
     }
     procCount++;
     cout << "Number of procs " << procCount << endl;
-    if (procCount > MAXNUMTHREAD)
+    if (procCount > MAXNUMPROC)
     {
       int tempBufSize;
       char* tempBuf;
