@@ -129,7 +129,7 @@ int HandleClient(int sock_client)
     
     string version = req.GetVersion();
     if( version == "1.0")
-    clientReq.ModifyHeader("Connection", "close");
+    req.ModifyHeader("Connection", "close");
     /*const char *endline = (const char *)memmem (cbuf, totalbytes, "\r\n", 2);
     
     int iter = 0;
