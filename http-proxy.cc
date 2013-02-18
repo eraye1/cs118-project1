@@ -275,7 +275,7 @@ void * HandleClient(void * sock)
 
       pthread_mutex_lock(&cache_mutex);
       PageCache[HostPath] = sdata;
-      pthread_mutex_unlock(&ccache_mutex);
+      pthread_mutex_unlock(&cache_mutex);
 
       rep.ParseResponse(sdata.c_str(),numbytes);
 
