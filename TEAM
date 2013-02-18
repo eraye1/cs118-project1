@@ -1,0 +1,11 @@
+Team Members:
+Minjian Wang
+UID: 803775245
+Andrew Bax
+UID: 603783213
+
+Section Worked on
+HandleClient function: Andrew Bax
+Cache implementation: Minjian Wang, Andrew Bax
+Handling Invalid and Improper requests: Minjian Wang
+HttpRecieveData: Andrew Bax
