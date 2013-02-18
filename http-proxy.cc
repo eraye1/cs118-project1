@@ -245,14 +245,14 @@ int HandleClient(int sock_client)
     bool cached = false;
     string HostPath = req.GetHost()+req.GetPath();
     for(map<string,HttpResponse>::iterator ii=PageCache.begin(); ii!=PageCache.end(); ++ii){
-    if ( HostPath== (*ii).first ){
+    if ( HostPath == (*ii).first ){
     	//this means the object was found in the cache, return the HttpResponse via socket.
       cached = true;
       
-      tempBufSize = rep.GetTotalLength();
+      tempBufSize = (*ii).GetTotalLength();
       tempBuf = (char*)malloc(tempBufSize);
   
-      (*ii).second.FormatResponse(tempBuf);
+      ((*ii).second).FormatResponse(tempBuf);
   
   
       cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
@@ -269,14 +269,9 @@ int HandleClient(int sock_client)
         return 0;
       }
     	
-    }    		
+     }    		
     }
     	
-    	
-    	
-    	
-    
-
     if (!cached) 
     {
     	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
