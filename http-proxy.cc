@@ -22,8 +22,12 @@
 
 using namespace std;
 
+<<<<<<< Updated upstream
 pthread_mutex_t cache_mutex;
 const string SERVER_PORT = "14890";
+=======
+const string SERVER_PORT = "14891";
+>>>>>>> Stashed changes
 const size_t BUFSIZE = 1024;
 const int MAXNUMTHREAD = 10;
 map<string,string> PageCache;
