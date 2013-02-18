@@ -17,13 +17,14 @@
 #include <fcntl.h>
 #include <time.h>
 #include <map>
+#include <string.h>
 
 using namespace std;
 
 const string SERVER_PORT = "14891";
 const size_t BUFSIZE = 1024;
 const int MAXNUMPROC = 10;
-map<String,HttpResponse> PageCache;
+map<string,HttpResponse> PageCache;
 
 int GetHeaderStats(char* buf,int size, char** headerStart)
 {
@@ -274,7 +275,7 @@ int HandleClient(int sock_client)
     	
     	
     	
-    }
+    
 
     if (!cached) 
     {
