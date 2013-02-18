@@ -16,12 +16,15 @@
 #include <sstream>
 #include <fcntl.h>
 #include <time.h>
+#include <map>
+#include <string.h>
 
 using namespace std;
 
-const string SERVER_PORT = "14890";
+const string SERVER_PORT = "14891";
 const size_t BUFSIZE = 1024;
 const int MAXNUMPROC = 10;
+map<string,HttpResponse> PageCache;
 
 int GetHeaderStats(char* buf,int size, char** headerStart)
 {
@@ -238,7 +241,38 @@ int HandleClient(int sock_client)
     getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
     //Check to see if it's in there and ...
+    
+    /* Design for proxy server cache.  For each page that we fetch, we store the message.  That can be done via a map that maps each ip and path to a message.  Then, we search the map for the ip and path before we create a new socket connection and we create a response based on our stored message rather than forwarding the new request.  Only question is what to do with the headers.*/
     bool cached = false;
+    string HostPath = req.GetHost()+req.GetPath();
+    for(map<string,HttpResponse>::iterator ii=PageCache.begin(); ii!=PageCache.end(); ++ii){
+    if ( HostPath == (*ii).first ){
+    	//this means the object was found in the cache, return the HttpResponse via socket.
+      cached = true;
+      
+      tempBufSize = (*ii).GetTotalLength();
+      tempBuf = (char*)malloc(tempBufSize);
+  
+      ((*ii).second).FormatResponse(tempBuf);
+  
+  
+      cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
+      cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
+      free(tempBuf);
+  
+
+      if(head.FindHeader("Connection") == "close")
+      {
+        cout << "HEADER Connection: close found" << endl;
+        cout << "Connection: " << sock_client << " closed." << endl << endl;
+        close(sock_server);
+        close(sock_client);
+        return 0;
+      }
+    	
+     }    		
+    }
+    	
     if (!cached) 
     {
     	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
@@ -257,7 +291,7 @@ int HandleClient(int sock_client)
       //cout << "??" << endl;
       numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
       cout << "Recv " << numbytes << " from server." << endl;
-     
+
       headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
       head.ParseHeaders(hbuf,headersize);
       datasize = atoi(head.FindHeader("Content-Length").c_str());
@@ -265,7 +299,9 @@ int HandleClient(int sock_client)
       close(sock_server);
       rep.ParseResponse(sbuf,numbytes);
 
-      //TODO, need to cache the response here, can use a map with a lookup key and a buffer.
+      ///
+      PageCache.insert(map<string,HttpResponse>::value_type(HostPath,rep));
+      ///
       ss.str("");
   
       ss << "Version: " << rep.GetVersion() << endl;
@@ -323,6 +359,7 @@ int main (int argc, char *argv[])
   struct addrinfo hostai, *result;
   struct sockaddr_storage their_addr;
   socklen_t addr_size;
+  
   
   memset(&hostai,0,sizeof hostai);
   hostai.ai_family = AF_INET;  //IPv4, but not sure if we need to do IPv6? No
