@@ -18,12 +18,14 @@
 #include <time.h>
 #include <map>
 #include <string.h>
+#include <pthread.h>
 
 using namespace std;
 
+pthread_mutex_t cache_mutex;
 const string SERVER_PORT = "14890";
 const size_t BUFSIZE = 1024;
-const int MAXNUMPROC = 10;
+const int MAXNUMTHREAD = 10;
 map<string,string> PageCache;
 
 int GetHeaderStats(const char* buf,int size, char** headerStart)
@@ -107,7 +109,6 @@ int ReceiveHttpData(int sock_d,string& data, bool isresponse)
     const char* tempBuf = NULL;
     tempBuf = data.c_str();
     headersize = GetHeaderStats(tempBuf,data.find("\r\n\r\n")+4,&hbuf);
-    cout << "here?" << endl;
     head.ParseHeaders(hbuf,headersize);
     datasize = atoi(head.FindHeader("Content-Length").c_str());
     while(1)
@@ -142,8 +143,8 @@ int ReceiveHttpData(int sock_d,string& data, bool isresponse)
         close(sock_d);
         return totalbytes;
       }
-      cout << "Read: " << dataread << endl;
-      cout << "Expect: " << datasize << endl;
+      //cout << "Read: " << dataread << endl;
+      //cout << "Expect: " << datasize << endl;
       if(dataread == datasize)
       {
           break;
@@ -156,8 +157,9 @@ int ReceiveHttpData(int sock_d,string& data, bool isresponse)
 }
 
 
-int HandleClient(int sock_client)
+void * HandleClient(void * sock)
 {
+  int sock_client = *((int*) sock);
   //bool closeConnection = false;
   int sock_server;
   int numbytes;
@@ -183,7 +185,7 @@ int HandleClient(int sock_client)
     totalbytes = ReceiveHttpData(sock_client,cdata,false);
     cout << "Recieve status: " << totalbytes << endl;
     if(totalbytes == 0)
-      return 0;
+      pthread_exit(NULL);
   
     HttpRequest req;
     HttpResponse rep;
@@ -212,7 +214,7 @@ int HandleClient(int sock_client)
       rep.FormatResponse(tempBuf);
       cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
       free(tempBuf);
-      return 0;
+      pthread_exit(NULL);
     } 
     
     string version = req.GetVersion();
@@ -250,40 +252,9 @@ int HandleClient(int sock_client)
     //Check to see if it's in there and ...
     
     /* Design for proxy server cache.  For each page that we fetch, we store the message.  That can be done via a map that maps each ip and path to a message.  Then, we search the map for the ip and path before we create a new socket connection and we create a response based on our stored message rather than forwarding the new request.  Only question is what to do with the headers.*/
-    bool cached = false;
-    string HostPath = req.GetHost()+req.GetPath();
-    //map<string,HttpResponse>::PageCache.find(HostPath);
-    //for(map<string,HttpResponse>::iterator ii=PageCache.begin(); ii!=PageCache.end(); ++ii){
-    //if ( HostPath == (*ii).first )
-    //{
-    	////this means the object was found in the cache, return the HttpResponse via socket.
-      //cached = true;
-      
 
-      //tempBufSize = (*ii).second.GetTotalLength();
-      //tempBuf = (char*)malloc(tempBufSize);
-
-  
-      //((*ii).second).FormatResponse(tempBuf);
-  
-  
-      //cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes header" << endl;
-      //cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
-      //free(tempBuf);
-  
-
-      //if(head.FindHeader("Connection") == "close")
-      //{
-        //cout << "HEADER Connection: close found" << endl;
-        //cout << "Connection: " << sock_client << " closed." << endl << endl;
-        //close(sock_server);
-        //close(sock_client);
-        //return 0;
-      //}
-    	
-    //}    		
-    	
-    if (!cached) 
+    string HostPath = req.GetHost()+req.GetPath();  		
+    if (!isCached(HostPath)) 
     {
     	sock_server = socket(result->ai_family,result->ai_socktype,result->ai_protocol);
     	connect(sock_server,result->ai_addr, result->ai_addrlen);
@@ -302,17 +273,12 @@ int HandleClient(int sock_client)
       numbytes = ReceiveHttpData(sock_server,sdata,true);
       cout << "Recv " << numbytes << " from server." << endl;
 
-      //headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
-      //head.ParseHeaders(hbuf,headersize);
-      //datasize = atoi(head.FindHeader("Content-Length").c_str());
+      pthread_mutex_lock(&cache_mutex);
+      PageCache[HostPath] = sdata;
+      pthread_mutex_unlock(&ccache_mutex);
 
-      close(sock_server);
       rep.ParseResponse(sdata.c_str(),numbytes);
 
-  
-      //PageCache.insert(map<string,string>::value_type(HostPath,rep));
-      PageCache[HostPath] = sdata;
-      
       ss.str("");
   
       ss << "Version: " << rep.GetVersion() << endl;
@@ -325,37 +291,44 @@ int HandleClient(int sock_client)
       tempBuf = (char*)malloc(tempBufSize);
   
       rep.FormatResponse(tempBuf);
-  
-  
-      cout << "Sent " << send(sock_client, sdata.c_str(), numbytes,0) << " bytes header" << endl;
-      //cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
-      free(tempBuf);
-  
-
-      if(head.FindHeader("Connection") == "close")
-      {
-        cout << "HEADER Connection: close found" << endl;
-        cout << "Connection: " << sock_client << " closed." << endl << endl;
-        close(sock_server);
-        close(sock_client);
-        return 0;
-      }
+      close(sock_server);
+      
     }
-    else {  //Cached, get it from internal memory and send it.
+    else //Cached, get it from internal memory and send it.
+    {  
+      cout << "Cached!!!" << endl;
+      pthread_mutex_lock(&cache_mutex);
+      sdata = PageCache[HostPath];
+      pthread_mutex_unlock(&cache_mutex);
+      numbytes = sdata.size();
       
-      
-      
-      
+    }
+
+
+
+    cout << "Sent " << send(sock_client, sdata.c_str(), numbytes,0) << " bytes header" << endl;
+    //cout << "Sent " << send(sock_client, sbuf+tempBufSize, datasize,0) << " bytes data" << endl;
+    free(tempBuf);
+
+
+    if(head.FindHeader("Connection") == "close")
+    {
+      cout << "HEADER Connection: close found" << endl;
+      cout << "Connection: " << sock_client << " closed." << endl << endl;
+      close(sock_server);
+      close(sock_client);
+      pthread_exit(NULL);
     }
   }
   
-  return 0;
+  pthread_exit(NULL);
 }
 
 
 
 int main (int argc, char *argv[])
 {
+  pthread_mutex_init(&cache_mutex, NULL);
   //http-proxy called without command-line parameters
   if (argc != 1)
     {
@@ -406,21 +379,21 @@ int main (int argc, char *argv[])
   cout << "listenresult: " << listenresult << endl;
   //Broke these lines up and replaced '\n' with endl and it stopped 
   //getting stuck and accepted my telnet requests.
-  int procCount = 0;
+  int threadCount = 0;
   while(1)
   {
     addr_size = sizeof their_addr;
 
     sock_new = accept(sock_d, (struct sockaddr *)&their_addr, &addr_size);  //accept the connection
     int wpstat = waitpid(-1,NULL,WNOHANG);
-    if(procCount > 0 && wpstat > 0)
+    if(threadCount > 0 && wpstat > 0)
     {
       cout << "WP Stat " << wpstat << endl;
-      procCount--;
+      threadCount--;
     }
-    procCount++;
-    cout << "Number of procs " << procCount << endl;
-    if (procCount > MAXNUMPROC)
+    threadCount++;
+    cout << "Number of procs " << threadCount << endl;
+    if (threadCount > MAXNUMTHREAD)
     {
       int tempBufSize;
       char* tempBuf;
@@ -440,22 +413,23 @@ int main (int argc, char *argv[])
       cout << "Sent " << send(sock_new, tempBuf, tempBufSize,0) << " bytes" << endl;
       close(sock_new);
       free(tempBuf);
-      procCount--;
+      threadCount--;
     }
     else if(sock_new)
     {
-      if (!fork()) // this is the child process 
-      {
-        close(sock_d);  // child doesn't need the listener
-        HandleClient(sock_new);
-        return 0;
-      }
-      cout << "Connection: " << sock_new << " opened." << endl;
-      close(sock_new); //Getting "Address alread in use" error immediatly after a run... thought this would release the socket and fix it.
+      //if (!fork()) // this is the child process 
+      //{
+        //close(sock_d);  // child doesn't need the listener
+        //HandleClient(sock_new);
+        //return 0;
+      //}
+      //cout << "Connection: " << sock_new << " opened." << endl;
+      //close(sock_new); //Getting "Address alread in use" error immediatly after a run... thought this would release the socket and fix it.
+      pthread_t client;
+      pthread_create(&client,NULL,HandleClient,(void*)&sock_new);
+ 
     }  
   }
-  
-  
   
   return 0;
 }
