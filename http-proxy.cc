@@ -223,6 +223,7 @@ int HandleClient(int sock_client)
     ss << "Path: " << req.GetPath() << endl;
     ss << "Version: " << req.GetVersion() << endl;
     
+    
     cout << ss.str();
     
     memset(&hostai,0,sizeof hostai);
@@ -248,16 +249,15 @@ int HandleClient(int sock_client)
       tempBuf = (char*)malloc(tempBufSize);
     
     	req.FormatRequest(tempBuf);    
-  
+      ss.str("");
+
       cout << "Sent " << send(sock_server,tempBuf,tempBufSize,0) << " bytes to server" << endl;
   
       free(tempBuf);
       //cout << "??" << endl;
       numbytes = ReceiveHttpHeader(sock_server,sbuf,true);
       cout << "Recv " << numbytes << " from server." << endl;
-      //TODO
-      //Currently we only get the header from the server.
-      //Need to call ReceiveHttpData() again with a new buffer to get page data
+     
       headersize = GetHeaderStats(sbuf,numbytes,&hbuf);
       head.ParseHeaders(hbuf,headersize);
       datasize = atoi(head.FindHeader("Content-Length").c_str());
@@ -378,7 +378,7 @@ int main (int argc, char *argv[])
       char* tempBuf;
       //Error Server busy/full
       cout << "==========================" << endl;
-      cout << "Server Full" << endl;
+      cout << "-------Server Full-------" << endl;
       cout << "==========================" << endl;
       HttpResponse rep;
       HttpHeaders head;
