@@ -22,13 +22,10 @@
 
 using namespace std;
 
-<<<<<<< Updated upstream
+
 pthread_mutex_t cache_mutex;
 pthread_mutex_t tcount_mutex;
-const string SERVER_PORT = "14890";
-=======
 const string SERVER_PORT = "14891";
->>>>>>> Stashed changes
 const size_t BUFSIZE = 1024;
 const int MAXNUMTHREAD = 10;
 map<string,string> PageCache;
@@ -209,7 +206,7 @@ void * HandleClient(void * sock)
     catch (ParseException ex)
     {
       string cmp = "Request is not GET";
-      if (strcmp(ex.what(), cmp.c_str())){
+      if (ex.what() == cmp){
       rep.SetStatusCode("501");
       rep.SetStatusMsg("Not Implemented");
       rep.SetVersion(req.GetVersion());      	
