@@ -24,10 +24,14 @@
 
 using namespace std;
 
+<<<<<<< HEAD
 pthread_mutex_t read_mutex;
+=======
+
+>>>>>>> 1d595f70174d7267adb0461695da03c8b137d765
 pthread_mutex_t cache_mutex;
 pthread_mutex_t tcount_mutex;
-const string SERVER_PORT = "14890";
+const string SERVER_PORT = "14891";
 const size_t BUFSIZE = 1024;
 const int MAXNUMTHREAD = 10;
 map<string,string> PageCache;
