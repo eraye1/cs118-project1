@@ -19,7 +19,7 @@
 
 using namespace std;
 
-const string SERVER_PORT = "14890";
+const string SERVER_PORT = "14891";
 const size_t BUFSIZE = 1024;
 const int MAXNUMPROC = 10;
 
@@ -237,6 +237,8 @@ int HandleClient(int sock_client)
     getaddrinfo(req.GetHost().c_str(), ss.str().c_str(), &hostai, &result); //take the flags set in hostai and create an addrinfo with those values and flags stuff made.
     //TODO Implement caching hereish?  This is where we can map ip and path to data.
     //Check to see if it's in there and ...
+    
+    /* Design for proxy server cache.  For each page that we fetch, we store the message.  That can be done via a map that maps each ip and path to a message.  Then, we search the map for the ip and path before we create a new socket connection and we create a response based on our stored message rather than forwarding the new request.  Only question is what to do with the headers.*/
     bool cached = false;
     if (!cached) 
     {
