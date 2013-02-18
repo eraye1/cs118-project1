@@ -259,8 +259,10 @@ int HandleClient(int sock_client)
     	////this means the object was found in the cache, return the HttpResponse via socket.
       //cached = true;
       
+
       //tempBufSize = (*ii).second.GetTotalLength();
       //tempBuf = (char*)malloc(tempBufSize);
+
   
       //((*ii).second).FormatResponse(tempBuf);
   
