@@ -4,15 +4,14 @@ UID: 803775245
 Andrew Bax
 UID: 603783213
 
-Current Issues:
+Design:
+We used pthreads instead of fork() because sharing the cache with 
+processes was more complicated than sharing with threads
 
-If the export PATH stuff is not added, error looks like this when trying to ./http-proxy.
-Build failed
- -> task in 'http-proxy' failed (exit status 1): 
- {task 37451600: cxx http-proxy.cc -> http-proxy.cc.1.o}
-['/usr/local/cs/bin/g++', '-O0', '-g3', '-Wall', '-Werror', '-I/u/cs/grad/yingdi/boost/include', '../http-proxy.cc', '-c', '-o', 'http-proxy.cc.1.o']
+We used a single function to handle recieving requests and responses to 
+simplify the calls need to get data from remote sources
 
-Somewhere around then listen function, the program hangs.  Not sure if that's what it's supposed to do (is the http server running or is there some other problem).  You can run ./waf configure and then ./waf, then cd to build and ./http-proxy to see the output (i'm outputing the fd to stdout right now to avoid errors that arise if I don't use them.).
+
 
 
 
