@@ -23,10 +23,12 @@
 using namespace std;
 
 pthread_mutex_t cache_mutex;
+pthread_mutex_t tcount_mutex;
 const string SERVER_PORT = "14890";
 const size_t BUFSIZE = 1024;
 const int MAXNUMTHREAD = 10;
 map<string,string> PageCache;
+int threadCount = 0;
 
 int GetHeaderStats(const char* buf,int size, char** headerStart)
 {
@@ -185,7 +187,12 @@ void * HandleClient(void * sock)
     totalbytes = ReceiveHttpData(sock_client,cdata,false);
     cout << "Recieve status: " << totalbytes << endl;
     if(totalbytes == 0)
+    {
+      pthread_mutex_lock(&tcount_mutex);
+      threadCount--;
+      pthread_mutex_unlock(&tcount_mutex);
       pthread_exit(NULL);
+    }
   
     HttpRequest req;
     HttpResponse rep;
@@ -214,6 +221,9 @@ void * HandleClient(void * sock)
       rep.FormatResponse(tempBuf);
       cout << "Sent " << send(sock_client, tempBuf, tempBufSize,0) << " bytes" << endl;
       free(tempBuf);
+      pthread_mutex_lock(&tcount_mutex);
+      threadCount--;
+      pthread_mutex_unlock(&tcount_mutex);
       pthread_exit(NULL);
     } 
     
@@ -317,10 +327,16 @@ void * HandleClient(void * sock)
       cout << "Connection: " << sock_client << " closed." << endl << endl;
       close(sock_server);
       close(sock_client);
+      pthread_mutex_lock(&tcount_mutex);
+      threadCount--;
+      pthread_mutex_unlock(&tcount_mutex);
       pthread_exit(NULL);
+      
     }
   }
-  
+  pthread_mutex_lock(&tcount_mutex);
+  threadCount--;
+  pthread_mutex_unlock(&tcount_mutex);
   pthread_exit(NULL);
 }
 
@@ -329,6 +345,7 @@ void * HandleClient(void * sock)
 int main (int argc, char *argv[])
 {
   pthread_mutex_init(&cache_mutex, NULL);
+  pthread_mutex_init(&tcount_mutex, NULL);
   //http-proxy called without command-line parameters
   if (argc != 1)
     {
@@ -379,20 +396,16 @@ int main (int argc, char *argv[])
   cout << "listenresult: " << listenresult << endl;
   //Broke these lines up and replaced '\n' with endl and it stopped 
   //getting stuck and accepted my telnet requests.
-  int threadCount = 0;
+  
   while(1)
   {
     addr_size = sizeof their_addr;
 
     sock_new = accept(sock_d, (struct sockaddr *)&their_addr, &addr_size);  //accept the connection
-    int wpstat = waitpid(-1,NULL,WNOHANG);
-    if(threadCount > 0 && wpstat > 0)
-    {
-      cout << "WP Stat " << wpstat << endl;
-      threadCount--;
-    }
+
     threadCount++;
     cout << "Number of procs " << threadCount << endl;
+    pthread_mutex_lock(&tcount_mutex);
     if (threadCount > MAXNUMTHREAD)
     {
       int tempBufSize;
@@ -413,10 +426,11 @@ int main (int argc, char *argv[])
       cout << "Sent " << send(sock_new, tempBuf, tempBufSize,0) << " bytes" << endl;
       close(sock_new);
       free(tempBuf);
-      threadCount--;
+      pthread_mutex_unlock(&tcount_mutex);
     }
     else if(sock_new)
     {
+      pthread_mutex_unlock(&tcount_mutex);
       //if (!fork()) // this is the child process 
       //{
         //close(sock_d);  // child doesn't need the listener
@@ -429,6 +443,7 @@ int main (int argc, char *argv[])
       pthread_create(&client,NULL,HandleClient,(void*)&sock_new);
  
     }  
+    pthread_mutex_unlock(&tcount_mutex);
   }
   
   return 0;
